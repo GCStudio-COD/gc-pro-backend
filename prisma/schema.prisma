@@ -1,0 +1,164 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Employee {
+  id             String    @id @default(uuid())
+  firstName      String
+  lastName       String
+  email          String    @unique
+  passwordHash   String
+  departmentId   String?
+  role           String    @default("Pending") // SuperAdmin, Admin, PM, Employee, Pending
+  status         String    @default("Pending") // Pending, Active, Inactive, On Leave
+  profileImage   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  department     Department? @relation(fields: [departmentId], references: [id])
+  tasksAssigned  Task[]      @relation("TaskAssignee")
+  timeLogs       TimeLog[]
+  attendanceLogs AttendanceLog[]
+  leaveRequests  LeaveRequest[]
+  projects       Project[]   @relation("ProjectEmployees")
+  notifications  Notification[]
+
+  managedDepartments Department[] @relation("DepartmentHead")
+  organizedMeetings Meeting[] @relation("MeetingOrganizer")
+  participatingMeetings Meeting[] @relation("MeetingParticipants")
+  notes          Note[]
+}
+
+model Department {
+  id        String   @id @default(uuid())
+  name      String
+  headId    String?
+  status    String   @default("Healthy") // Healthy, Warning, Critical
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  head      Employee?  @relation("DepartmentHead", fields: [headId], references: [id])
+  employees Employee[]
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  teamId      String?
+  startDate   DateTime
+  endDate     DateTime
+  priority    String   @default("Medium") // Low, Medium, High, Critical
+  status      String   @default("Planning") // Planning, In Progress, On Hold, Completed
+  githubUrl   String?
+  liveUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employees   Employee[] @relation("ProjectEmployees")
+  tasks       Task[]
+  notes       Note[]
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  content   String   @db.Text
+  projectId String
+  creatorId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator   Employee @relation(fields: [creatorId], references: [id])
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  projectId   String
+  assigneeId  String
+  dueDate     DateTime
+  priority    String   @default("Medium") // Low, Medium, High, Critical
+  status      String   @default("To Do") // To Do, In Progress, Done
+  timeConsumed Int     @default(0) // Total time consumed in seconds
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id])
+  assignee    Employee @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  timeLogs    TimeLog[]
+}
+
+model TimeLog {
+  id              String   @id @default(uuid())
+  employeeId      String
+  taskId          String?
+  startTime       DateTime @default(now())
+  endTime         DateTime?
+  durationSeconds Int?
+  createdAt       DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  task     Task?    @relation(fields: [taskId], references: [id])
+}
+
+model AttendanceLog {
+  id              String    @id @default(uuid())
+  employeeId      String
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+  checkInTime     DateTime  @default(now())
+  checkOutTime    DateTime?
+  durationSeconds Int?
+  date            DateTime  @default(now()) @db.Date
+  createdAt       DateTime  @default(now())
+}
+
+model LeaveRequest {
+  id          String   @id @default(uuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  startDate   DateTime @db.Date
+  endDate     DateTime @db.Date
+  reason      String
+  status      String   @default("Pending") // Pending, Approved, Rejected
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id          String    @id @default(uuid())
+  employeeId  String?
+  employee    Employee? @relation(fields: [employeeId], references: [id])
+  targetRole  String?
+  creatorId   String?
+  message     String
+  type        String    @default("alert")
+  read        Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+}
+
+model Meeting {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  type        String    @default("Internal") // Internal, Client, Team
+  status      String    @default("Scheduled") // Scheduled, Completed, Cancelled
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  organizerId String
+  organizer   Employee  @relation("MeetingOrganizer", fields: [organizerId], references: [id])
+  participants Employee[] @relation("MeetingParticipants")
+}
