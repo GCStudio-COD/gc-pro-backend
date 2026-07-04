@@ -79,8 +79,18 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: AuthRequest, res) => {
   try {
+    const userRole = req.user?.role;
+    if (userRole !== 'admin' && userRole !== 'SuperAdmin') {
+      return res.status(403).json({ error: 'Unauthorized to delete users' });
+    }
+    
+    // Additional check: Don't allow an admin to delete a SuperAdmin
+    const target = await prisma.employee.findUnique({ where: { id: req.params.id } });
+    if (target?.role === 'SuperAdmin' && userRole !== 'SuperAdmin') {
+      return res.status(403).json({ error: 'Cannot delete SuperAdmin' });
+    }
     await prisma.employee.delete({ where: { id: req.params.id } });
     res.json({ success: true });
   } catch (error) {
