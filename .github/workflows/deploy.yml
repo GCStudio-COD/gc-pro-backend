@@ -1,0 +1,32 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/gc-project-backend
+            
+            # Pull latest changes from GitHub
+            git pull origin master
+            
+            # Install any new dependencies
+            npm install
+            
+            # Update Prisma database schema if there are changes
+            npx prisma db push
+            
+            # Restart the server (Assuming you are using PM2)
+            pm2 restart all
