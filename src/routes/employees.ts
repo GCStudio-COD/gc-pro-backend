@@ -30,16 +30,16 @@ router.put('/:id/approve', async (req: AuthRequest, res) => {
 
   try {
     // Basic validation
-    if (!['admin', 'project-manager', 'employee'].includes(role)) {
+    if (!['admin', 'PM', 'employee'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role provided' });
     }
 
     // Role-based authorization
-    if (userRole === 'project-manager' && role !== 'employee') {
+    if (userRole === 'PM' && role !== 'employee') {
       return res.status(403).json({ error: 'PMs can only approve Employees' });
     }
     
-    if (!['SuperAdmin', 'admin', 'project-manager'].includes(userRole as string)) {
+    if (!['SuperAdmin', 'admin', 'PM'].includes(userRole as string)) {
       return res.status(403).json({ error: 'Unauthorized to approve users' });
     }
 

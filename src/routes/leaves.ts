@@ -129,7 +129,7 @@ router.post('/', async (req, res) => {
     await prisma.notification.createMany({
       data: [
         { targetRole: 'admin', message: `New ${type} leave request submitted`, type: 'leave', creatorId: employeeId },
-        { targetRole: 'project-manager', message: `New ${type} leave request submitted`, type: 'leave', creatorId: employeeId }
+        { targetRole: 'PM', message: `New ${type} leave request submitted`, type: 'leave', creatorId: employeeId }
       ]
     });
 
@@ -150,7 +150,7 @@ router.put('/:id/cancel', async (req, res) => {
     await prisma.notification.createMany({
       data: [
         { targetRole: 'admin', message: `Leave cancellation requested`, type: 'leave', creatorId: updated.employeeId },
-        { targetRole: 'project-manager', message: `Leave cancellation requested`, type: 'leave', creatorId: updated.employeeId }
+        { targetRole: 'PM', message: `Leave cancellation requested`, type: 'leave', creatorId: updated.employeeId }
       ]
     });
 

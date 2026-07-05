@@ -62,7 +62,7 @@ router.post('/', async (req: any, res) => {
     await prisma.notification.createMany({
       data: [
         { targetRole: 'admin', message: `New project created: ${project.name}`, type: 'project', creatorId },
-        { targetRole: 'project-manager', message: `New project created: ${project.name}`, type: 'project', creatorId }
+        { targetRole: 'PM', message: `New project created: ${project.name}`, type: 'project', creatorId }
       ]
     });
 
@@ -138,7 +138,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req: any, res) => {
   const role = req.user.role;
-  if (role !== 'admin' && role !== 'project-manager' && role !== 'SuperAdmin') {
+  if (role !== 'admin' && role !== 'PM' && role !== 'SuperAdmin') {
     return res.status(403).json({ error: 'Unauthorized to delete projects' });
   }
 
