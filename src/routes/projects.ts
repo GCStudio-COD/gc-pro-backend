@@ -13,8 +13,8 @@ router.get('/', async (req: any, res) => {
   try {
     const filters: any = {};
     if (role === 'employee') {
-      filters.employees = {
-        some: { id: employeeId }
+      filters.tasks = {
+        some: { assigneeId: employeeId }
       };
     }
     
