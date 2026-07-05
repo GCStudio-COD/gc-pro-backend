@@ -68,6 +68,7 @@ router.post('/', async (req: any, res) => {
 
     res.json(project);
   } catch (error) {
+    console.error('[CREATE PROJECT ERROR]:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
