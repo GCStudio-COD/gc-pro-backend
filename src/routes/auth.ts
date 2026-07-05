@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { authenticateToken, AuthRequest, revokedTokens } from '../middleware/auth';
 
 import { OAuth2Client } from 'google-auth-library';
 
@@ -189,6 +189,19 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+router.post('/logout', authenticateToken, (req: AuthRequest, res) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token) {
+    revokedTokens.add(token);
+  }
+  res.json({ success: true });
+});
+
+router.get('/check', authenticateToken, (req: AuthRequest, res) => {
+  res.json({ success: true });
 });
 
 export default router;
