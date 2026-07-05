@@ -10,14 +10,14 @@ routerWithAuth.use(authenticateToken);
 
 // Start a timer for a task
 routerWithAuth.post('/start', async (req: any, res) => {
-  const { taskId } = req.body;
+  const { taskId, timestamp } = req.body;
   const employeeId = req.user.id;
   try {
     const timeLog = await prisma.timeLog.create({
       data: {
         employeeId,
         taskId: taskId || null,
-        startTime: new Date()
+        startTime: timestamp ? new Date(timestamp) : new Date()
       }
     });
 
@@ -45,14 +45,14 @@ routerWithAuth.post('/start', async (req: any, res) => {
 
 // Stop a timer
 routerWithAuth.post('/stop', async (req, res) => {
-  const { timeLogId } = req.body;
+  const { timeLogId, timestamp } = req.body;
   try {
     const timeLog = await prisma.timeLog.findUnique({ where: { id: timeLogId } });
     if (!timeLog) {
       return res.status(404).json({ error: 'Time log not found' });
     }
 
-    const endTime = new Date();
+    const endTime = timestamp ? new Date(timestamp) : new Date();
     const durationSeconds = Math.floor((endTime.getTime() - timeLog.startTime.getTime()) / 1000);
 
     const updatedLog = await prisma.timeLog.update({

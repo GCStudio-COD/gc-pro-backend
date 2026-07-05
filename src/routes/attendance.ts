@@ -50,12 +50,14 @@ router.get('/status', async (req: any, res) => {
 // Check-in (Start workday)
 router.post('/check-in', async (req: any, res) => {
   const employeeId = req.user.id;
+  const { timestamp } = req.body;
   try {
+    const checkInTime = timestamp ? new Date(timestamp) : new Date();
     const attendanceLog = await prisma.attendanceLog.create({
       data: {
         employeeId,
-        checkInTime: new Date(),
-        date: new Date()
+        checkInTime,
+        date: checkInTime
       }
     });
     res.json({ attendanceLogId: attendanceLog.id });
@@ -67,14 +69,14 @@ router.post('/check-in', async (req: any, res) => {
 
 // Check-out (End workday)
 router.post('/check-out', async (req, res) => {
-  const { attendanceLogId } = req.body;
+  const { attendanceLogId, timestamp } = req.body;
   try {
     const log = await prisma.attendanceLog.findUnique({ where: { id: attendanceLogId } });
     if (!log) {
       return res.status(404).json({ error: 'Attendance log not found' });
     }
 
-    const checkOutTime = new Date();
+    const checkOutTime = timestamp ? new Date(timestamp) : new Date();
     const durationSeconds = Math.floor((checkOutTime.getTime() - log.checkInTime.getTime()) / 1000);
 
     const updatedLog = await prisma.attendanceLog.update({
