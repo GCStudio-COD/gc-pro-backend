@@ -40,12 +40,25 @@ router.get('/', async (req: any, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: any, res) => {
   try {
-    const project = await prisma.project.create({ data: req.body });
+    const creatorId = req.user.id;
+    const role = req.user.role;
+    
+    // Base data
+    const data: any = { ...req.body };
+    
+    // Automatically add the creator to the project if they are a PM or employee
+    // so they can see the project they just created.
+    if (role === 'project-manager' || role === 'employee') {
+      data.employees = {
+        connect: [{ id: creatorId }]
+      };
+    }
+
+    const project = await prisma.project.create({ data });
 
     // Notify admins and PMs
-    const creatorId = (req as any).user.id;
     await prisma.notification.createMany({
       data: [
         { targetRole: 'admin', message: `New project created: ${project.name}`, type: 'project', creatorId },
