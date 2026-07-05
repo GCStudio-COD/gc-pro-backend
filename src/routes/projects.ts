@@ -136,11 +136,36 @@ router.put('/:id', async (req, res) => {
 });
 
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: any, res) => {
+  const role = req.user.role;
+  if (role !== 'admin' && role !== 'project-manager' && role !== 'SuperAdmin') {
+    return res.status(403).json({ error: 'Unauthorized to delete projects' });
+  }
+
   try {
-    await prisma.project.delete({ where: { id: req.params.id } });
+    const projectId = req.params.id;
+    
+    // First, find all tasks related to the project to delete their time logs
+    const tasks = await prisma.task.findMany({ where: { projectId } });
+    const taskIds = tasks.map(t => t.id);
+
+    // Delete related TimeLogs
+    if (taskIds.length > 0) {
+      await prisma.timeLog.deleteMany({ where: { taskId: { in: taskIds } } });
+    }
+
+    // Delete related Tasks
+    await prisma.task.deleteMany({ where: { projectId } });
+
+    // Delete related Notes
+    await prisma.note.deleteMany({ where: { projectId } });
+
+    // Finally, delete the Project
+    await prisma.project.delete({ where: { id: projectId } });
+    
     res.json({ success: true });
   } catch (error) {
+    console.error('Error deleting project:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
