@@ -12,7 +12,7 @@ router.get('/', async (req: any, res) => {
   const employeeId = req.user.id;
   try {
     const filters: any = {};
-    if (role === 'employee' || role === 'project-manager') {
+    if (role === 'employee') {
       filters.employees = {
         some: { id: employeeId }
       };
@@ -48,9 +48,9 @@ router.post('/', async (req: any, res) => {
     // Base data
     const data: any = { ...req.body };
     
-    // Automatically add the creator to the project if they are a PM or employee
+    // Automatically add the creator to the project if they are an employee
     // so they can see the project they just created.
-    if (role === 'project-manager' || role === 'employee') {
+    if (role === 'employee') {
       data.employees = {
         connect: [{ id: creatorId }]
       };
