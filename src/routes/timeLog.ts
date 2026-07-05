@@ -20,6 +20,15 @@ routerWithAuth.post('/start', async (req: any, res) => {
         startTime: new Date()
       }
     });
+
+    if (taskId) {
+      // Update task status to "In Progress" if it's started
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { status: 'In Progress' }
+      });
+    }
+
     res.json({ timeLogId: timeLog.id });
   } catch (error) {
     console.error('Error starting time log:', error);
