@@ -3,160 +3,118 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest, revokedTokens } from '../middleware/auth';
-
-import { OAuth2Client } from 'google-auth-library';
+import nodemailer from 'nodemailer';
 
 const router = Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretjwtkey';
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '541436437556-e9elopqu97qs3083lg3j12c0oce8sv1q.apps.googleusercontent.com';
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
-router.get('/google/desktop', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Desktop Login</title>
-      <script src="https://accounts.google.com/gsi/client" async defer></script>
-      <style>
-        body { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; background: #f0f2f5; }
-        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
-        h1 { margin-top: 0; }
-        #g_id_onload { display: none; }
-      </style>
-    </head>
-    <body>
-      <div class="card">
-        <h1>Log In to GC Studio</h1>
-        <p>Please log in with Google to continue to the desktop app.</p>
-        <div id="g_id_onload"
-             data-client_id="${GOOGLE_CLIENT_ID}"
-             data-context="signin"
-             data-ux_mode="popup"
-             data-callback="handleCredentialResponse"
-             data-auto_prompt="false">
-        </div>
-        <div class="g_id_signin"
-             data-type="standard"
-             data-shape="rectangular"
-             data-theme="outline"
-             data-text="signin_with"
-             data-size="large"
-             data-logo_alignment="left">
-        </div>
-        <p id="status" style="color: #666; margin-top: 1rem;"></p>
-      </div>
-
-      <script>
-        async function handleCredentialResponse(response) {
-          const statusEl = document.getElementById('status');
-          statusEl.innerText = "Authenticating...";
-          try {
-            const res = await fetch('/api/auth/google', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ credential: response.credential })
-            });
-            const data = await res.json();
-            if (res.ok && data.token) {
-              statusEl.innerText = "Success! Redirecting back to app...";
-              // Deep link back to Tauri app
-              window.location.href = 'gcapp://auth?token=' + data.token;
-              
-              // Close tab after a delay as fallback
-              setTimeout(() => {
-                statusEl.innerHTML = "You can now close this tab and return to the app.";
-              }, 2000);
-            } else {
-              statusEl.innerText = "Error: " + (data.error || "Authentication failed");
-            }
-          } catch (e) {
-            statusEl.innerText = "Network error";
-          }
-        }
-      </script>
-    </body>
-    </html>
-  `);
-});
-
-router.post('/google', async (req, res) => {
-  const { credential } = req.body;
-  try {
-    const ticket = await googleClient.verifyIdToken({
-      idToken: credential,
-      audience: GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-    if (!payload || !payload.email) return res.status(400).json({ error: 'Invalid Google Token' });
-
-    const email = payload.email;
-    const firstName = payload.given_name || 'Google';
-    const lastName = payload.family_name || 'User';
-
-    let employee = await prisma.employee.findUnique({ where: { email } });
-    if (!employee) {
-      // Auto promote to SuperAdmin if it's the requested email
-      const isSuperAdmin = email === 'wearegoalcreatives@gmail.com';
-      employee = await prisma.employee.create({
-        data: {
-          email,
-          firstName,
-          lastName,
-          passwordHash: 'google-sso', // placeholder since they use Google
-          role: isSuperAdmin ? 'SuperAdmin' : 'Pending',
-          status: isSuperAdmin ? 'Active' : 'Pending'
-        }
-      });
-    }
-
-    // Auto-promote existing account to SuperAdmin just in case
-    if (email === 'wearegoalcreatives@gmail.com' && employee.role !== 'SuperAdmin') {
-       employee = await prisma.employee.update({
-          where: { email },
-          data: { role: 'SuperAdmin', status: 'Active' }
-       });
-    }
-
-    if (employee.status === 'Pending' || employee.role === 'Pending') {
-       return res.status(403).json({ error: 'Account is pending approval' });
-    }
-
-    const token = jwt.sign({ id: employee.id, role: employee.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, employee });
-  } catch (error) {
-    console.error('Google Auth Error:', error);
-    res.status(500).json({ error: 'Failed to authenticate with Google' });
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER || 'wearegoalcreatives@gmail.com',
+    pass: process.env.EMAIL_PASS || ''
   }
 });
 
-router.post('/signup', async (req, res) => {
+router.post('/signup/request', async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
   try {
     const existingUser = await prisma.employee.findUnique({ where: { email } });
-    if (existingUser) return res.status(400).json({ error: 'Email already in use' });
+    if (existingUser) {
+      if (existingUser.status !== 'Unverified') {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
+      // If unverified, we can resend OTP and overwrite the old one
+    }
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    const employee = await prisma.employee.create({
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    if (existingUser && existingUser.status === 'Unverified') {
+      await prisma.employee.update({
+        where: { email },
+        data: { firstName, lastName, passwordHash, otpCode, otpExpiry }
+      });
+    } else {
+      await prisma.employee.create({
+        data: {
+          firstName,
+          lastName,
+          email,
+          passwordHash,
+          role: 'Pending',
+          status: 'Unverified',
+          otpCode,
+          otpExpiry
+        }
+      });
+    }
+
+    // Send the email
+    const mailOptions = {
+      from: process.env.EMAIL_USER || 'wearegoalcreatives@gmail.com',
+      to: email,
+      subject: 'GC Studio - Verify your Email',
+      text: `Hello ${firstName},\n\nYour One-Time Password (OTP) is: ${otpCode}\n\nThis code is valid for 10 minutes.\n\nThank you!`
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+    } catch (emailErr) {
+      console.error('Error sending email:', emailErr);
+      return res.status(500).json({ error: 'Failed to send OTP email. Please try again later.' });
+    }
+
+    res.json({ message: 'OTP sent to email.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to request sign up' });
+  }
+});
+
+router.post('/signup/verify', async (req, res) => {
+  const { email, otp } = req.body;
+  try {
+    const employee = await prisma.employee.findUnique({ where: { email } });
+    
+    if (!employee || employee.status !== 'Unverified') {
+      return res.status(400).json({ error: 'Invalid request or user already verified.' });
+    }
+
+    if (employee.otpCode !== otp) {
+      return res.status(400).json({ error: 'Invalid OTP.' });
+    }
+
+    if (!employee.otpExpiry || new Date() > employee.otpExpiry) {
+      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Verified! Set to Pending
+    const updatedEmployee = await prisma.employee.update({
+      where: { email },
       data: {
-        firstName,
-        lastName,
-        email,
-        passwordHash,
-        role: 'Pending',
-        status: 'Pending'
+        status: 'Pending',
+        otpCode: null,
+        otpExpiry: null
       }
     });
 
-    res.json({ message: 'Account created. Pending approval.', employeeId: employee.id });
+    // Notify admins and PMs
+    await prisma.notification.createMany({
+      data: [
+        { targetRole: 'admin', message: `New user registration pending approval: ${employee.firstName} ${employee.lastName}`, type: 'system' },
+        { targetRole: 'PM', message: `New user registration pending approval: ${employee.firstName} ${employee.lastName}`, type: 'system' }
+      ]
+    });
+
+    res.json({ message: 'Account verified successfully. Pending Admin approval.' });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to sign up' });
+    res.status(500).json({ error: 'Failed to verify OTP' });
   }
 });
 
@@ -166,8 +124,12 @@ router.post('/login', async (req, res) => {
     const employee = await prisma.employee.findUnique({ where: { email } });
     if (!employee) return res.status(400).json({ error: 'Invalid credentials' });
 
+    if (employee.status === 'Unverified') {
+      return res.status(403).json({ error: 'Account is unverified. Please verify your email.' });
+    }
+
     if (employee.status === 'Pending' || employee.role === 'Pending') {
-      return res.status(403).json({ error: 'Account is pending approval' });
+      return res.status(403).json({ error: 'Account is pending approval by an Admin' });
     }
 
     const validPassword = employee.passwordHash === 'dummy' ? (password === 'dummy') : await bcrypt.compare(password, employee.passwordHash);
