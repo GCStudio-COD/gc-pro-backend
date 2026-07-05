@@ -160,8 +160,24 @@ router.put('/:id/cancel', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: any, res) => {
+  const role = req.user.role;
+  const userId = req.user.id;
+
   try {
+    const leave = await prisma.leaveRequest.findUnique({ where: { id: req.params.id } });
+    if (!leave) return res.status(404).json({ error: 'Leave not found' });
+
+    // If updating status, require admin/PM role and prevent self-approval
+    if (req.body.status && req.body.status !== leave.status) {
+      if (role !== 'admin' && role !== 'PM' && role !== 'SuperAdmin') {
+        return res.status(403).json({ error: 'Unauthorized to approve leaves' });
+      }
+      if (leave.employeeId === userId) {
+        return res.status(403).json({ error: 'You cannot approve your own leave request' });
+      }
+    }
+
     const updated = await prisma.leaveRequest.update({
       where: { id: req.params.id },
       data: req.body
