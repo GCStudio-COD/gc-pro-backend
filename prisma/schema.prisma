@@ -127,10 +127,11 @@ model LeaveRequest {
   id          String   @id @default(uuid())
   employeeId  String
   employee    Employee @relation(fields: [employeeId], references: [id])
+  type        String   @default("Paid") // Paid, Sick, Emergency
   startDate   DateTime @db.Date
   endDate     DateTime @db.Date
   reason      String
-  status      String   @default("Pending") // Pending, Approved, Rejected
+  status      String   @default("Pending") // Pending, Approved, Rejected, CancelPending, Cancelled
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
