@@ -23,10 +23,17 @@ routerWithAuth.post('/start', async (req: any, res) => {
 
     if (taskId) {
       // Update task status to "In Progress" if it's started
-      await prisma.task.update({
+      const task = await prisma.task.update({
         where: { id: taskId },
         data: { status: 'In Progress' }
       });
+
+      if (task.projectId) {
+        await prisma.project.update({
+          where: { id: task.projectId },
+          data: { status: 'In Progress' }
+        });
+      }
     }
 
     res.json({ timeLogId: timeLog.id });
