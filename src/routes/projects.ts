@@ -143,29 +143,33 @@ router.delete('/:id', async (req: any, res) => {
   }
 
   try {
-    const projectId = req.params.id;
+    console.log(`[DELETE PROJECT] Attempting to delete project ${req.params.id} by user ${req.user.id} (${role})`);
     
-    // First, find all tasks related to the project to delete their time logs
-    const tasks = await prisma.task.findMany({ where: { projectId } });
-    const taskIds = tasks.map(t => t.id);
+    // Manually delete related TimeLogs first, then Tasks, then Notes to satisfy foreign key constraints
+    await prisma.timeLog.deleteMany({
+      where: {
+        task: {
+          projectId: req.params.id
+        }
+      }
+    });
 
-    // Delete related TimeLogs
-    if (taskIds.length > 0) {
-      await prisma.timeLog.deleteMany({ where: { taskId: { in: taskIds } } });
-    }
+    await prisma.task.deleteMany({
+      where: { projectId: req.params.id }
+    });
 
-    // Delete related Tasks
-    await prisma.task.deleteMany({ where: { projectId } });
+    await prisma.note.deleteMany({
+      where: { projectId: req.params.id }
+    });
 
-    // Delete related Notes
-    await prisma.note.deleteMany({ where: { projectId } });
-
-    // Finally, delete the Project
-    await prisma.project.delete({ where: { id: projectId } });
+    await prisma.project.delete({
+      where: { id: req.params.id }
+    });
     
+    console.log(`[DELETE PROJECT] Successfully deleted project ${req.params.id}`);
     res.json({ success: true });
   } catch (error) {
-    console.error('Error deleting project:', error);
+    console.error(`[DELETE PROJECT] Error deleting project ${req.params.id}:`, error);
     res.status(500).json({ error: 'Server error' });
   }
 });
