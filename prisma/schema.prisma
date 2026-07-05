@@ -59,6 +59,7 @@ model Project {
   endDate     DateTime
   priority    String   @default("Medium") // Low, Medium, High, Critical
   status      String   @default("Planning") // Planning, In Progress, On Hold, Completed
+  clientName  String?
   githubUrl   String?
   liveUrl     String?
   createdAt   DateTime @default(now())
