@@ -129,7 +129,7 @@ router.post('/', async (req, res) => {
     await prisma.notification.createMany({
       data: [
         { targetRole: 'admin', message: `New ${type} leave request submitted`, type: 'leave', creatorId: employeeId },
-        { targetRole: 'PM', message: `New ${type} leave request submitted`, type: 'leave', creatorId: employeeId }
+        { targetRole: 'project-manager', message: `New ${type} leave request submitted`, type: 'leave', creatorId: employeeId }
       ]
     });
 
@@ -150,7 +150,7 @@ router.put('/:id/cancel', async (req, res) => {
     await prisma.notification.createMany({
       data: [
         { targetRole: 'admin', message: `Leave cancellation requested`, type: 'leave', creatorId: updated.employeeId },
-        { targetRole: 'PM', message: `Leave cancellation requested`, type: 'leave', creatorId: updated.employeeId }
+        { targetRole: 'project-manager', message: `Leave cancellation requested`, type: 'leave', creatorId: updated.employeeId }
       ]
     });
 
@@ -170,7 +170,7 @@ router.put('/:id', async (req: any, res) => {
 
     // If updating status, require admin/PM role and prevent self-approval
     if (req.body.status && req.body.status !== leave.status) {
-      if (role !== 'admin' && role !== 'PM' && role !== 'SuperAdmin') {
+      if (role !== 'admin' && role !== 'project-manager' && role !== 'SuperAdmin') {
         return res.status(403).json({ error: 'Unauthorized to approve leaves' });
       }
       if (leave.employeeId === userId) {

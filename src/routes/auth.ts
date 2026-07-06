@@ -107,7 +107,7 @@ router.post('/signup/verify', async (req, res) => {
     await prisma.notification.createMany({
       data: [
         { targetRole: 'admin', message: `New user registration pending approval: ${employee.firstName} ${employee.lastName}`, type: 'system' },
-        { targetRole: 'PM', message: `New user registration pending approval: ${employee.firstName} ${employee.lastName}`, type: 'system' }
+        { targetRole: 'project-manager', message: `New user registration pending approval: ${employee.firstName} ${employee.lastName}`, type: 'system' }
       ]
     });
 
@@ -115,6 +115,86 @@ router.post('/signup/verify', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to verify OTP' });
+  }
+});
+
+router.post('/forgot-password/request', async (req, res) => {
+  const { email } = req.body;
+  try {
+    const employee = await prisma.employee.findUnique({ where: { email } });
+    if (!employee) {
+      // Return success even if not found to prevent email enumeration
+      return res.json({ message: 'If that email exists, an OTP has been sent.' });
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await prisma.employee.update({
+      where: { email },
+      data: { otpCode, otpExpiry }
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER || 'wearegoalcreatives@gmail.com',
+      to: email,
+      subject: 'GC Studio - Password Reset',
+      text: `Hello ${employee.firstName},\n\nYour password reset OTP is: ${otpCode}\n\nThis code is valid for 10 minutes.\n\nIf you did not request this, please ignore this email.`
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+    } catch (emailErr) {
+      console.error('Error sending email:', emailErr);
+      return res.status(500).json({ error: 'Failed to send reset email. Please try again later.' });
+    }
+
+    res.json({ message: 'If that email exists, an OTP has been sent.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to request password reset' });
+  }
+});
+
+router.post('/forgot-password/reset', async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+  try {
+    const employee = await prisma.employee.findUnique({ where: { email } });
+    
+    if (!employee) {
+      return res.status(400).json({ error: 'Invalid request.' });
+    }
+
+    if (employee.otpCode !== otp) {
+      return res.status(400).json({ error: 'Invalid OTP.' });
+    }
+
+    if (!employee.otpExpiry || new Date() > employee.otpExpiry) {
+      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Check if new password is the same as the old password
+    const isSamePassword = await bcrypt.compare(newPassword, employee.passwordHash);
+    if (isSamePassword) {
+      return res.status(400).json({ error: 'New password cannot be the same as your old password.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    await prisma.employee.update({
+      where: { email },
+      data: {
+        passwordHash,
+        otpCode: null,
+        otpExpiry: null
+      }
+    });
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 
