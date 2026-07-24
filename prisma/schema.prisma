@@ -17,7 +17,6 @@ model Employee {
   lastName       String
   email          String    @unique
   passwordHash   String
-  departmentId   String?
   role           String    @default("Pending") // SuperAdmin, Admin, PM, Employee, Pending
   status         String    @default("Pending") // Unverified, Pending, Active, Inactive, On Leave
   profileImage   String?
@@ -26,93 +25,27 @@ model Employee {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  department     Department? @relation(fields: [departmentId], references: [id])
-  tasksAssigned  Task[]      @relation("TaskAssignee")
   timeLogs       TimeLog[]
   attendanceLogs AttendanceLog[]
   leaveRequests  LeaveRequest[]
-  projects       Project[]   @relation("ProjectEmployees")
   notifications  Notification[]
 
-  managedDepartments Department[] @relation("DepartmentHead")
   organizedMeetings Meeting[] @relation("MeetingOrganizer")
   participatingMeetings Meeting[] @relation("MeetingParticipants")
-  notes          Note[]
-}
-
-model Department {
-  id        String   @id @default(uuid())
-  name      String
-  headId    String?
-  status    String   @default("Healthy") // Healthy, Warning, Critical
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  head      Employee?  @relation("DepartmentHead", fields: [headId], references: [id])
-  employees Employee[]
-}
-
-model Project {
-  id          String   @id @default(uuid())
-  name        String
-  description String
-  teamId      String?
-  startDate   DateTime
-  endDate     DateTime
-  priority    String   @default("Medium") // Low, Medium, High, Critical
-  status      String   @default("Planning") // Planning, In Progress, On Hold, Completed
-  clientName  String?
-  githubUrl   String?
-  liveUrl     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  employees   Employee[] @relation("ProjectEmployees")
-  tasks       Task[]
-  notes       Note[]
-}
-
-model Note {
-  id        String   @id @default(uuid())
-  content   String   @db.Text
-  projectId String
-  creatorId String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  creator   Employee @relation(fields: [creatorId], references: [id])
-}
-
-model Task {
-  id          String   @id @default(uuid())
-  title       String
-  description String
-  projectId   String
-  assigneeId  String
-  dueDate     DateTime
-  priority    String   @default("Medium") // Low, Medium, High, Critical
-  status      String   @default("To Do") // To Do, In Progress, Done
-  timeConsumed Int     @default(0) // Total time consumed in seconds
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  project     Project  @relation(fields: [projectId], references: [id])
-  assignee    Employee @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  timeLogs    TimeLog[]
+  plakyTasksAssigned PlakyTask[] @relation("PlakyTaskAssignee")
 }
 
 model TimeLog {
   id              String   @id @default(uuid())
   employeeId      String
-  taskId          String?
+  plakyTaskId     String?
   startTime       DateTime @default(now())
   endTime         DateTime?
   durationSeconds Int?
   createdAt       DateTime @default(now())
 
-  employee Employee @relation(fields: [employeeId], references: [id])
-  task     Task?    @relation(fields: [taskId], references: [id])
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+  plakyTask  PlakyTask? @relation(fields: [plakyTaskId], references: [id])
 }
 
 model AttendanceLog {
@@ -165,4 +98,73 @@ model Meeting {
   organizerId String
   organizer   Employee  @relation("MeetingOrganizer", fields: [organizerId], references: [id])
   participants Employee[] @relation("MeetingParticipants")
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  spaces    Space[]
+}
+
+model Space {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  description String?
+  icon        String?
+  color       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  boards      Board[]
+}
+
+model Board {
+  id          String   @id @default(uuid())
+  spaceId     String
+  name        String
+  description String?
+  isFavorite  Boolean  @default(false)
+  columns     Json?    @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  space       Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  groups      BoardGroup[]
+}
+
+model BoardGroup {
+  id        String   @id @default(uuid())
+  boardId   String
+  name      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks     PlakyTask[]
+}
+
+model PlakyTask {
+  id             String      @id @default(uuid())
+  groupId        String
+  parentTaskId   String?
+  name           String
+  assigneeId     String?
+  dueDate        DateTime?
+  content        String?     @db.Text
+  creativeType   String?     // Video, Image, Text
+  paymentStatus  String      @default("Pending") // Pending, Partially Paid, Paid, Not Applicable
+  status         String      @default("To Do") // To Do, In Progress, Review, Approved, Done
+  description    String?     @db.Text
+  customFields   Json?       @default("{}")
+  order          Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  group          BoardGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  parentTask     PlakyTask?  @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subTasks       PlakyTask[] @relation("SubTasks")
+  assignee       Employee?   @relation("PlakyTaskAssignee", fields: [assigneeId], references: [id])
+  timeLogs       TimeLog[]
 }

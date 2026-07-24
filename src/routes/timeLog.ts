@@ -16,24 +16,17 @@ routerWithAuth.post('/start', async (req: any, res) => {
     const timeLog = await prisma.timeLog.create({
       data: {
         employeeId,
-        taskId: taskId || null,
+        plakyTaskId: taskId || null,
         startTime: timestamp ? new Date(timestamp) : new Date()
       }
     });
 
     if (taskId) {
       // Update task status to "In Progress" if it's started
-      const task = await prisma.task.update({
+      await prisma.plakyTask.update({
         where: { id: taskId },
         data: { status: 'In Progress' }
       });
-
-      if (task.projectId) {
-        await prisma.project.update({
-          where: { id: task.projectId },
-          data: { status: 'In Progress' }
-        });
-      }
     }
 
     res.json({ timeLogId: timeLog.id });
@@ -62,7 +55,7 @@ routerWithAuth.post('/stop', async (req, res) => {
         durationSeconds
       },
       include: {
-        task: true
+        plakyTask: true
       }
     });
     res.json(updatedLog);
@@ -78,7 +71,7 @@ routerWithAuth.get('/', async (req: any, res) => {
   try {
     const logs = await prisma.timeLog.findMany({
       where: { employeeId, durationSeconds: { not: null } },
-      include: { task: true },
+      include: { plakyTask: true },
       orderBy: { createdAt: 'desc' }
     });
     res.json(logs);
@@ -93,10 +86,9 @@ router.get('/task/:taskId', async (req, res) => {
   const { taskId } = req.params;
   try {
     const logs = await prisma.timeLog.findMany({
-      where: { taskId, durationSeconds: { not: null } }
+      where: { plakyTaskId: taskId, durationSeconds: { not: null } }
     });
 
-    const totalSeconds = logs.reduce((acc, log) => acc + (log.durationSeconds || 0), 0);
     res.json(logs); // We return the logs array like the frontend task view expects
   } catch (error) {
     console.error('Error fetching task time logs:', error);

@@ -13,8 +13,7 @@ router.get('/', async (req, res) => {
     const filters: any = {};
     if (status) filters.status = status;
     const employees = await prisma.employee.findMany({ 
-      where: filters,
-      include: { department: true }
+      where: filters
     });
     res.json(employees);
   } catch (error) {
