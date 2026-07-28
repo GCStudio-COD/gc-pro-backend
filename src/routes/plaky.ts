@@ -86,6 +86,7 @@ router.get('/boards', async (req: Request, res: Response) => {
     let whereClause = {};
     let tasksWhereClause: any = { parentTaskId: null };
     let subTasksClause: any = true;
+    let groupsWhereClause: any = {};
 
     if (role === 'employee' && employeeId) {
       whereClause = {
@@ -93,12 +94,14 @@ router.get('/boards', async (req: Request, res: Response) => {
       };
       tasksWhereClause = { parentTaskId: null, assigneeId: String(employeeId) };
       subTasksClause = { where: { assigneeId: String(employeeId) } };
+      groupsWhereClause = { tasks: { some: { assigneeId: String(employeeId) } } };
     }
 
     const boards = await prisma.board.findMany({
       where: whereClause,
       include: {
         groups: {
+          where: groupsWhereClause,
           include: {
             tasks: {
               where: tasksWhereClause,
@@ -119,16 +122,19 @@ router.get('/boards/:id', async (req: Request, res: Response) => {
     const { employeeId, role } = req.query;
     let tasksWhereClause: any = { parentTaskId: null };
     let subTasksClause: any = true;
+    let groupsWhereClause: any = {};
 
     if (role === 'employee' && employeeId) {
       tasksWhereClause = { parentTaskId: null, assigneeId: String(employeeId) };
       subTasksClause = { where: { assigneeId: String(employeeId) } };
+      groupsWhereClause = { tasks: { some: { assigneeId: String(employeeId) } } };
     }
 
     const board = await prisma.board.findUnique({
       where: { id: req.params.id },
       include: {
         groups: {
+          where: groupsWhereClause,
           include: {
             tasks: {
               where: tasksWhereClause,
