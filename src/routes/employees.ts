@@ -85,12 +85,28 @@ router.delete('/:id', async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'Unauthorized to delete users' });
     }
     
+    const targetId = req.params.id;
+    
     // Additional check: Don't allow an admin to delete a SuperAdmin
-    const target = await prisma.employee.findUnique({ where: { id: req.params.id } });
+    const target = await prisma.employee.findUnique({ where: { id: targetId } });
     if (target?.role === 'SuperAdmin' && userRole !== 'SuperAdmin') {
       return res.status(403).json({ error: 'Cannot delete SuperAdmin' });
     }
-    await prisma.employee.delete({ where: { id: req.params.id } });
+    
+    // Manually cascade deletes since Prisma schema lacks onDelete: Cascade
+    await prisma.$transaction([
+      prisma.timeLog.deleteMany({ where: { employeeId: targetId } }),
+      prisma.attendanceLog.deleteMany({ where: { employeeId: targetId } }),
+      prisma.leaveRequest.deleteMany({ where: { employeeId: targetId } }),
+      prisma.notification.deleteMany({ where: { employeeId: targetId } }),
+      prisma.meeting.deleteMany({ where: { organizerId: targetId } }),
+      prisma.plakyTask.updateMany({ 
+        where: { assigneeId: targetId }, 
+        data: { assigneeId: null } 
+      }),
+      prisma.employee.delete({ where: { id: targetId } })
+    ]);
+    
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
