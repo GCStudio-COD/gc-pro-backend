@@ -35,8 +35,28 @@ router.post('/workspaces', async (req: Request, res: Response) => {
 
 router.get('/spaces', async (req: Request, res: Response) => {
   try {
+    const { employeeId, role } = req.query;
+    let whereClause = {};
+    let includeBoards: any = true;
+
+    if (role === 'employee' && employeeId) {
+      whereClause = {
+        boards: {
+          some: {
+            groups: { some: { tasks: { some: { assigneeId: String(employeeId) } } } }
+          }
+        }
+      };
+      includeBoards = {
+        where: {
+          groups: { some: { tasks: { some: { assigneeId: String(employeeId) } } } }
+        }
+      };
+    }
+
     const spaces = await prisma.space.findMany({
-      include: { boards: true },
+      where: whereClause,
+      include: { boards: includeBoards },
     });
     res.json(spaces);
   } catch (error) {
@@ -62,13 +82,27 @@ router.post('/spaces', async (req: Request, res: Response) => {
 
 router.get('/boards', async (req: Request, res: Response) => {
   try {
+    const { employeeId, role } = req.query;
+    let whereClause = {};
+    let tasksWhereClause: any = { parentTaskId: null };
+    let subTasksClause: any = true;
+
+    if (role === 'employee' && employeeId) {
+      whereClause = {
+        groups: { some: { tasks: { some: { assigneeId: String(employeeId) } } } }
+      };
+      tasksWhereClause = { parentTaskId: null, assigneeId: String(employeeId) };
+      subTasksClause = { where: { assigneeId: String(employeeId) } };
+    }
+
     const boards = await prisma.board.findMany({
+      where: whereClause,
       include: {
         groups: {
           include: {
             tasks: {
-              where: { parentTaskId: null },
-              include: { subTasks: true },
+              where: tasksWhereClause,
+              include: { subTasks: subTasksClause },
             },
           },
         },
@@ -82,15 +116,24 @@ router.get('/boards', async (req: Request, res: Response) => {
 
 router.get('/boards/:id', async (req: Request, res: Response) => {
   try {
+    const { employeeId, role } = req.query;
+    let tasksWhereClause: any = { parentTaskId: null };
+    let subTasksClause: any = true;
+
+    if (role === 'employee' && employeeId) {
+      tasksWhereClause = { parentTaskId: null, assigneeId: String(employeeId) };
+      subTasksClause = { where: { assigneeId: String(employeeId) } };
+    }
+
     const board = await prisma.board.findUnique({
       where: { id: req.params.id },
       include: {
         groups: {
           include: {
             tasks: {
-              where: { parentTaskId: null },
+              where: tasksWhereClause,
               include: { 
-                subTasks: true,
+                subTasks: subTasksClause,
                 assignee: { select: { id: true, firstName: true, lastName: true, profileImage: true } }
               },
             },
