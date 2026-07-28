@@ -159,6 +159,16 @@ router.post('/boards', async (req: Request, res: Response) => {
     const board = await prisma.board.create({
       data: { spaceId, name, description, isFavorite },
     });
+    
+    // Automatically create a default group so the user can immediately add tasks
+    await prisma.boardGroup.create({
+      data: {
+        boardId: board.id,
+        name: "New Group",
+        order: 0
+      }
+    });
+
     res.status(201).json(board);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create board' });
