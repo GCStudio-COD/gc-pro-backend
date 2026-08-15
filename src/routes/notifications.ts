@@ -52,4 +52,16 @@ router.put('/:id/read', async (req, res) => {
   }
 });
 
+router.delete('/:id', async (req, res) => {
+  try {
+    await prisma.notification.delete({
+      where: { id: req.params.id }
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 export default router;
+
