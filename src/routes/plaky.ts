@@ -4,6 +4,39 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 const prisma = new PrismaClient();
 const router = Router();
 
+// Helper to generate a slug from a string
+const generateSlug = (text: string) => {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')        // Replace spaces with -
+    .replace(/[^\w\-]+/g, '')    // Remove all non-word chars
+    .replace(/\-\-+/g, '-');      // Replace multiple - with single -
+};
+
+// Helper to ensure a unique space slug
+const getUniqueSpaceSlug = async (baseSlug: string) => {
+  let slug = baseSlug;
+  let counter = 1;
+  while (await prisma.space.findUnique({ where: { slug } })) {
+    slug = `${baseSlug}-${counter}`;
+    counter++;
+  }
+  return slug;
+};
+
+// Helper to ensure a unique board slug
+const getUniqueBoardSlug = async (baseSlug: string) => {
+  let slug = baseSlug;
+  let counter = 1;
+  while (await prisma.board.findUnique({ where: { slug } })) {
+    slug = `${baseSlug}-${counter}`;
+    counter++;
+  }
+  return slug;
+};
+
 // ==========================================
 // WORKSPACES
 // ==========================================
@@ -67,8 +100,11 @@ router.get('/spaces', async (req: Request, res: Response) => {
 router.post('/spaces', async (req: Request, res: Response) => {
   try {
     const { workspaceId, name, description, icon, color } = req.body;
+    const baseSlug = generateSlug(name) || 'space';
+    const slug = await getUniqueSpaceSlug(baseSlug);
+    
     const space = await prisma.space.create({
-      data: { workspaceId, name, description, icon, color },
+      data: { workspaceId, name, slug, description, icon, color },
     });
     res.status(201).json(space);
   } catch (error) {
@@ -79,6 +115,31 @@ router.post('/spaces', async (req: Request, res: Response) => {
 // ==========================================
 // BOARDS
 // ==========================================
+
+router.delete('/spaces/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userRole = req.user?.role?.toLowerCase() || '';
+    if (userRole === 'employee') {
+      return res.status(403).json({ error: 'Employees cannot delete spaces' });
+    }
+    
+    // Find first by id or slug
+    const spaceToDelete = await prisma.space.findFirst({
+      where: {
+        OR: [
+          { id: req.params.id as string }, { slug: req.params.id as string }
+        ]
+      }
+    });
+
+    if (!spaceToDelete) return res.status(404).json({ error: 'Space not found' });
+
+    await prisma.space.delete({ where: { id: spaceToDelete.id } });
+    res.json({ message: 'Space deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete space' });
+  }
+});
 
 router.get('/boards', async (req: Request, res: Response) => {
   try {
@@ -130,8 +191,13 @@ router.get('/boards/:id', async (req: Request, res: Response) => {
       groupsWhereClause = { tasks: { some: { assigneeId: String(employeeId) } } };
     }
 
-    const board = await prisma.board.findUnique({
-      where: { id: req.params.id },
+    // Use findFirst so we can match by either id or slug
+    const board = await prisma.board.findFirst({
+      where: {
+        OR: [
+          { id: req.params.id as string }, { slug: req.params.id as string }
+        ]
+      },
       include: {
         groups: {
           where: groupsWhereClause,
@@ -156,8 +222,11 @@ router.get('/boards/:id', async (req: Request, res: Response) => {
 router.post('/boards', async (req: Request, res: Response) => {
   try {
     const { spaceId, name, description, isFavorite } = req.body;
+    const baseSlug = generateSlug(name) || 'board';
+    const slug = await getUniqueBoardSlug(baseSlug);
+
     const board = await prisma.board.create({
-      data: { spaceId, name, description, isFavorite },
+      data: { spaceId, name, slug, description, isFavorite },
     });
     
     // Automatically create a default group so the user can immediately add tasks
@@ -169,6 +238,14 @@ router.post('/boards', async (req: Request, res: Response) => {
       }
     });
 
+    // Notify PMs and Admins about the new board
+    await prisma.notification.createMany({
+      data: [
+        { targetRole: 'project-manager', type: 'project', message: `New board created: ${board.name}` },
+        { targetRole: 'admin', type: 'project', message: `New board created: ${board.name}` }
+      ]
+    });
+
     res.status(201).json(board);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create board' });
@@ -177,10 +254,22 @@ router.post('/boards', async (req: Request, res: Response) => {
 
 router.put('/boards/:id', async (req: Request, res: Response) => {
   try {
-    const { name, description, isFavorite, columns } = req.body;
+    const { name, description, isFavorite, status, columns } = req.body;
+    
+    // Find first by id or slug
+    const boardToUpdate = await prisma.board.findFirst({
+      where: {
+        OR: [
+          { id: req.params.id as string }, { slug: req.params.id as string }
+        ]
+      }
+    });
+
+    if (!boardToUpdate) return res.status(404).json({ error: 'Board not found' });
+
     const board = await prisma.board.update({
-      where: { id: req.params.id },
-      data: { name, description, isFavorite, columns },
+      where: { id: boardToUpdate.id },
+      data: { name, description, isFavorite, status, columns },
     });
     res.json(board);
   } catch (error) {
@@ -191,6 +280,31 @@ router.put('/boards/:id', async (req: Request, res: Response) => {
 // ==========================================
 // GROUPS
 // ==========================================
+
+router.delete('/boards/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userRole = req.user?.role?.toLowerCase() || '';
+    if (userRole === 'employee') {
+      return res.status(403).json({ error: 'Employees cannot delete projects' });
+    }
+    
+    // Find first by id or slug
+    const boardToDelete = await prisma.board.findFirst({
+      where: {
+        OR: [
+          { id: req.params.id as string }, { slug: req.params.id as string }
+        ]
+      }
+    });
+
+    if (!boardToDelete) return res.status(404).json({ error: 'Board not found' });
+
+    await prisma.board.delete({ where: { id: boardToDelete.id } });
+    res.json({ message: 'Board deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete board' });
+  }
+});
 
 router.post('/groups', async (req: Request, res: Response) => {
   try {
@@ -208,25 +322,53 @@ router.post('/groups', async (req: Request, res: Response) => {
 // TASKS
 // ==========================================
 
+router.get('/tasks', async (req: Request, res: Response) => {
+  try {
+    const { employeeId, role } = req.query;
+    let whereClause: any = {};
+    if (role === 'employee' && employeeId) {
+      whereClause = { assigneeId: String(employeeId) };
+    }
+    const tasks = await prisma.plakyTask.findMany({
+      where: whereClause,
+      include: { assignee: true, group: { include: { board: true } } }
+    });
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch tasks' });
+  }
+});
+
 router.post('/tasks', async (req: Request, res: Response) => {
   try {
-    const { groupId, parentTaskId, name, assigneeId, dueDate, content, creativeType, paymentStatus, status, description, order } = req.body;
+    const { groupId, parentTaskId, name, assigneeId, dueDate, content, creativeType, paymentStatus, status, priority, description, order } = req.body;
     const task = await prisma.plakyTask.create({
       data: {
         groupId,
         parentTaskId,
         name,
         assigneeId,
-        dueDate: dueDate ? new Date(dueDate) : null,
+        dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : null,
         content,
         creativeType,
         paymentStatus: paymentStatus || 'Pending',
         status: status || 'To Do',
+        priority: priority || 'Medium',
         description,
         customFields: req.body.customFields || {},
         order: order || 0
       },
     });
+    if (assigneeId) {
+      await prisma.notification.create({
+        data: {
+          employeeId: assigneeId,
+          type: 'task',
+          message: `You have been assigned to a new task: ${task.name}`
+        }
+      });
+    }
+
     res.status(201).json(task);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create task' });
@@ -235,22 +377,47 @@ router.post('/tasks', async (req: Request, res: Response) => {
 
 router.put('/tasks/:id', async (req: Request, res: Response) => {
   try {
-    const { name, assigneeId, dueDate, content, creativeType, paymentStatus, status, description, order } = req.body;
+    const { name, assigneeId, dueDate, content, creativeType, paymentStatus, status, priority, description, order } = req.body;
+    const existingTask = await prisma.plakyTask.findUnique({ where: { id: req.params.id as string } });
+
     const task = await prisma.plakyTask.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: {
         name,
         assigneeId,
-        dueDate: dueDate ? new Date(dueDate) : undefined,
+        dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : undefined,
         content,
         creativeType,
         paymentStatus,
         status,
+        priority,
         description,
         customFields: req.body.customFields,
         order,
       },
     });
+
+    if (existingTask) {
+      if (assigneeId && existingTask.assigneeId !== assigneeId) {
+        await prisma.notification.create({
+          data: {
+            employeeId: assigneeId,
+            type: 'task',
+            message: `You have been assigned to task: ${task.name}`
+          }
+        });
+      }
+      if (status && existingTask.status !== status && task.assigneeId) {
+        await prisma.notification.create({
+          data: {
+            employeeId: task.assigneeId,
+            type: 'task',
+            message: `Task "${task.name}" status changed to ${status}`
+          }
+        });
+      }
+    }
+
     res.json(task);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update task' });
@@ -259,7 +426,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
 
 router.delete('/tasks/:id', async (req: Request, res: Response) => {
   try {
-    await prisma.plakyTask.delete({ where: { id: req.params.id } });
+    await prisma.plakyTask.delete({ where: { id: req.params.id as string } });
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete task' });

@@ -6,8 +6,6 @@ import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
 import employeeRoutes from './routes/employees';
 import departmentRoutes from './routes/departments';
-import projectRoutes from './routes/projects';
-import taskRoutes from './routes/tasks';
 import timeLogRoutes from './routes/timeLog';
 import attendanceRoutes from './routes/attendance';
 import leaveRoutes from './routes/leaves';
@@ -34,8 +32,6 @@ app.use('/api/auth', authRoutes);
 // Protected routes (handled inside each file)
 app.use('/api/employees', employeeRoutes);
 app.use('/api/departments', departmentRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/tasks', taskRoutes);
 app.use('/api/time-logs', timeLogRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leaves', leaveRoutes);

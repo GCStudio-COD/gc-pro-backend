@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
 router.put('/:id/approve', async (req: AuthRequest, res) => {
   const { role } = req.body;
   const userRole = req.user?.role;
-  const targetId = req.params.id;
+  const targetId = req.params.id as string;
 
   try {
     // Basic validation
@@ -85,7 +85,7 @@ router.delete('/:id', async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'Unauthorized to delete users' });
     }
     
-    const targetId = req.params.id;
+    const targetId = req.params.id as string;
     
     // Additional check: Don't allow an admin to delete a SuperAdmin
     const target = await prisma.employee.findUnique({ where: { id: targetId } });

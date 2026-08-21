@@ -63,51 +63,6 @@ async function main() {
     }
   });
 
-  // Create Project 1
-  await prisma.project.upsert({
-    where: { id: project1Id },
-    update: {},
-    create: {
-      id: project1Id,
-      name: 'Website Redesign',
-      description: 'Redesigning the corporate website.',
-      startDate: new Date(),
-      endDate: new Date(),
-      status: 'In Progress'
-    }
-  });
-
-  // Create Project 2
-  await prisma.project.upsert({
-    where: { id: project2Id },
-    update: {},
-    create: {
-      id: project2Id,
-      name: 'Mobile App',
-      description: 'Developing the iOS and Android app.',
-      startDate: new Date(),
-      endDate: new Date(),
-      status: 'In Progress'
-    }
-  });
-
-  // Create Tasks
-  for (const t of mockTasks) {
-    await prisma.task.upsert({
-      where: { id: t.id },
-      update: {},
-      create: {
-        id: t.id,
-        title: t.title,
-        description: `Description for ${t.title}`,
-        projectId: t.projectId,
-        assigneeId: employeeId,
-        dueDate: new Date(),
-        status: 'To Do'
-      }
-    });
-  }
-
   console.log('Database seeded successfully!');
 }
 

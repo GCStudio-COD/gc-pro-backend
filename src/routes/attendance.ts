@@ -111,11 +111,7 @@ router.get('/', async (req: any, res) => {
     const logs = await prisma.attendanceLog.findMany({
       where: whereClause,
       include: {
-        employee: {
-          include: {
-            department: true
-          }
-        }
+        employee: true
       },
       orderBy: { createdAt: 'desc' }
     });

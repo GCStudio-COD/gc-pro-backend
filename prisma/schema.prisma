@@ -112,6 +112,7 @@ model Space {
   id          String   @id @default(uuid())
   workspaceId String
   name        String
+  slug        String   @unique
   description String?
   icon        String?
   color       String?
@@ -125,8 +126,10 @@ model Board {
   id          String   @id @default(uuid())
   spaceId     String
   name        String
+  slug        String   @unique
   description String?
   isFavorite  Boolean  @default(false)
+  status      String   @default("Active") // Active, Completed
   columns     Json?    @default("[]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -156,6 +159,7 @@ model PlakyTask {
   creativeType   String?     // Video, Image, Text
   paymentStatus  String      @default("Pending") // Pending, Partially Paid, Paid, Not Applicable
   status         String      @default("To Do") // To Do, In Progress, Review, Approved, Done
+  priority       String      @default("Medium") // Low, Medium, High, Urgent
   description    String?     @db.Text
   customFields   Json?       @default("{}")
   order          Int         @default(0)

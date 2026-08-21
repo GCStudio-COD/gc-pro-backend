@@ -7,26 +7,11 @@ const prisma = new PrismaClient();
 
 router.use(authenticateToken);
 
-// Helper to get start/end of current week (Monday to Sunday)
-function getWeekRange() {
+// Helper to get start/end of current month
+function getMonthRange() {
   const now = new Date();
-  const dayOfWeek = now.getDay() || 7; // 1-7 (Mon-Sun)
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - dayOfWeek + 1);
-  monday.setHours(0, 0, 0, 0);
-  
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
-  
-  return { start: monday, end: sunday };
-}
-
-// Helper to get start/end of current year
-function getYearRange() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
   return { start, end };
 }
 
@@ -38,8 +23,7 @@ router.get('/balances/:employeeId', async (req, res) => {
   const { employeeId } = req.params;
   
   try {
-    const { start: weekStart, end: weekEnd } = getWeekRange();
-    const { start: yearStart, end: yearEnd } = getYearRange();
+    const { start: monthStart, end: monthEnd } = getMonthRange();
 
     const approvedLeaves = await prisma.leaveRequest.findMany({
       where: {
@@ -48,27 +32,19 @@ router.get('/balances/:employeeId', async (req, res) => {
       }
     });
 
-    let usedSick = 0;
     let usedPaid = 0;
-    let usedEmergency = 0;
 
     for (const leave of approvedLeaves) {
       const days = calculateDays(leave.startDate, leave.endDate);
       const start = new Date(leave.startDate);
       
-      if (leave.type === 'Sick' && start >= yearStart && start <= yearEnd) {
-        usedSick += days;
-      } else if (leave.type === 'Paid' && start >= weekStart && start <= weekEnd) {
+      if (leave.type === 'Paid' && start >= monthStart && start <= monthEnd) {
         usedPaid += days;
-      } else if (leave.type === 'Emergency' && start >= weekStart && start <= weekEnd) {
-        usedEmergency += days;
       }
     }
 
     res.json({
-      sick: { total: 14, used: usedSick, remaining: 14 - usedSick },
-      paid: { total: 1, used: usedPaid, remaining: 1 - usedPaid },
-      emergency: { total: 1, used: usedEmergency, remaining: 1 - usedEmergency }
+      paid: { total: 1, used: usedPaid, remaining: 1 - usedPaid }
     });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -98,8 +74,7 @@ router.post('/', async (req, res) => {
     
     // Validate balance before creating
     const days = calculateDays(startDate, endDate);
-    const { start: weekStart, end: weekEnd } = getWeekRange();
-    const { start: yearStart, end: yearEnd } = getYearRange();
+    const { start: monthStart, end: monthEnd } = getMonthRange();
     
     const approvedLeaves = await prisma.leaveRequest.findMany({
       where: { employeeId, status: 'Approved' }
@@ -109,17 +84,17 @@ router.post('/', async (req, res) => {
     for (const leave of approvedLeaves) {
       const start = new Date(leave.startDate);
       if (leave.type === type) {
-        if (type === 'Sick' && start >= yearStart && start <= yearEnd) {
-          used += calculateDays(leave.startDate, leave.endDate);
-        } else if ((type === 'Paid' || type === 'Emergency') && start >= weekStart && start <= weekEnd) {
+        if (type === 'Paid' && start >= monthStart && start <= monthEnd) {
           used += calculateDays(leave.startDate, leave.endDate);
         }
       }
     }
 
-    const limit = type === 'Sick' ? 14 : 1;
-    if (used + days > limit) {
-      return res.status(400).json({ error: `Insufficient ${type} leave balance.` });
+    if (type !== 'Work From Home') {
+      const limit = 1;
+      if (used + days > limit) {
+        return res.status(400).json({ error: `Insufficient ${type} leave balance.` });
+      }
     }
 
     const leave = await prisma.leaveRequest.create({ 
@@ -168,7 +143,6 @@ router.put('/:id', async (req: any, res) => {
     const leave = await prisma.leaveRequest.findUnique({ where: { id: req.params.id } });
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
 
-    // If updating status, require admin/PM role and prevent self-approval
     if (req.body.status && req.body.status !== leave.status) {
       if (role !== 'admin' && role !== 'project-manager' && role !== 'SuperAdmin') {
         return res.status(403).json({ error: 'Unauthorized to approve leaves' });

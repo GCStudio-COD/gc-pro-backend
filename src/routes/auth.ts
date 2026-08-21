@@ -18,8 +18,22 @@ const transporter = nodemailer.createTransport({
 });
 
 router.post('/signup/request', async (req, res) => {
-  const { firstName, lastName, email, password } = req.body;
+  let { firstName, lastName, email, password, fullname, fullName, name } = req.body;
   try {
+    if (!firstName) {
+      const full = (fullname || fullName || name || '').trim();
+      if (full) {
+        const parts = full.split(' ');
+        firstName = parts[0];
+        lastName = parts.slice(1).join(' ') || '-';
+      }
+    }
+    if (!firstName) {
+      firstName = email ? email.split('@')[0] : 'User';
+    }
+    if (!lastName) {
+      lastName = '-';
+    }
     const existingUser = await prisma.employee.findUnique({ where: { email } });
     if (existingUser) {
       if (existingUser.status !== 'Unverified') {
