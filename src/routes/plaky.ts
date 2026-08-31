@@ -318,6 +318,34 @@ router.post('/groups', async (req: Request, res: Response) => {
   }
 });
 
+router.put('/groups/:id', async (req: Request, res: Response) => {
+  try {
+    const { name, order } = req.body;
+    const group = await prisma.boardGroup.update({
+      where: { id: req.params.id as string },
+      data: { 
+        name: name !== undefined ? name : undefined,
+        order: order !== undefined ? order : undefined
+      },
+    });
+    res.json(group);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update group' });
+  }
+});
+
+router.delete('/groups/:id', async (req: Request, res: Response) => {
+  try {
+    const groupId = req.params.id as string;
+    // Delete all tasks in group first
+    await prisma.plakyTask.deleteMany({ where: { groupId } });
+    await prisma.boardGroup.delete({ where: { id: groupId } });
+    res.json({ message: 'Group deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete group' });
+  }
+});
+
 // ==========================================
 // TASKS
 // ==========================================
