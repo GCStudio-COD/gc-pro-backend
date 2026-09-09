@@ -90,7 +90,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    if (type !== 'Work From Home') {
+    if (type === 'Paid') {
       const limit = 1;
       if (used + days > limit) {
         return res.status(400).json({ error: `Insufficient ${type} leave balance.` });
@@ -184,3 +184,4 @@ router.delete('/:id', async (req, res) => {
 });
 
 export default router;
+
