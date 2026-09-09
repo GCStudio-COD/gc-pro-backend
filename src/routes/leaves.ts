@@ -33,18 +33,24 @@ router.get('/balances/:employeeId', async (req, res) => {
     });
 
     let usedPaid = 0;
+    let usedWfh = 0;
 
     for (const leave of approvedLeaves) {
       const days = calculateDays(leave.startDate, leave.endDate);
       const start = new Date(leave.startDate);
       
-      if (leave.type === 'Paid' && start >= monthStart && start <= monthEnd) {
-        usedPaid += days;
+      if (start >= monthStart && start <= monthEnd) {
+        if (leave.type === 'Paid') {
+          usedPaid += days;
+        } else if (leave.type === 'Work From Home') {
+          usedWfh += days;
+        }
       }
     }
 
     res.json({
-      paid: { total: 1, used: usedPaid, remaining: 1 - usedPaid }
+      paid: { total: 1, used: usedPaid, remaining: Math.max(0, 1 - usedPaid) },
+      wfh: { total: 4, used: usedWfh, remaining: Math.max(0, 4 - usedWfh) }
     });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -83,17 +89,20 @@ router.post('/', async (req, res) => {
     let used = 0;
     for (const leave of approvedLeaves) {
       const start = new Date(leave.startDate);
-      if (leave.type === type) {
-        if (type === 'Paid' && start >= monthStart && start <= monthEnd) {
-          used += calculateDays(leave.startDate, leave.endDate);
-        }
+      if (leave.type === type && start >= monthStart && start <= monthEnd) {
+        used += calculateDays(leave.startDate, leave.endDate);
       }
     }
 
     if (type === 'Paid') {
       const limit = 1;
       if (used + days > limit) {
-        return res.status(400).json({ error: `Insufficient ${type} leave balance.` });
+        return res.status(400).json({ error: 'Insufficient Paid leave balance. (Limit: 1 day/month)' });
+      }
+    } else if (type === 'Work From Home') {
+      const limit = 4;
+      if (used + days > limit) {
+        return res.status(400).json({ error: 'Insufficient Work From Home balance. (Limit: 4 days/month)' });
       }
     }
 
@@ -184,4 +193,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 export default router;
-
