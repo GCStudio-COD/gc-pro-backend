@@ -3,22 +3,14 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest, revokedTokens } from '../middleware/auth';
-import nodemailer from 'nodemailer';
+import { sendEmail } from '../lib/email';
 
 const router = Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretjwtkey';
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER || 'wearegoalcreatives@gmail.com',
-    pass: process.env.EMAIL_PASS || ''
-  }
-});
-
 router.post('/signup/request', async (req, res) => {
-  let { firstName, lastName, email, password, fullname, fullName, name } = req.body;
+  let { firstName, lastName, email, password, fullname, fullName, name } = req.body || {};
   try {
     if (!email || typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({ error: 'Valid email is required' });
@@ -76,19 +68,20 @@ router.post('/signup/request', async (req, res) => {
       });
     }
 
-    // Send the email
-    const mailOptions = {
-      from: process.env.EMAIL_USER || 'wearegoalcreatives@gmail.com',
-      to: email,
-      subject: 'GC Studio - Verify your Email',
-      text: `Hello ${firstName},\n\nYour One-Time Password (OTP) is: ${otpCode}\n\nThis code is valid for 10 minutes.\n\nThank you!`
-    };
-
+    // Send the email via Brevo / Nodemailer
     try {
-      await transporter.sendMail(mailOptions);
-    } catch (emailErr) {
-      console.error('Error sending email:', emailErr);
-      return res.status(500).json({ error: 'Failed to send OTP email. Please check server SMTP configuration.' });
+      await sendEmail({
+        to: email,
+        subject: 'GC Studio - Verify your Email',
+        text: `Hello ${firstName},\n\nYour One-Time Password (OTP) is: ${otpCode}\n\nThis code is valid for 10 minutes.\n\nThank you!`,
+        recipientName: firstName
+      });
+    } catch (emailErr: any) {
+      console.error('Error sending OTP email:', emailErr);
+      return res.status(500).json({ 
+        error: 'Failed to send OTP email. Please try again later.',
+        details: emailErr?.message || String(emailErr)
+      });
     }
 
     res.json({ message: 'OTP sent to email.' });
@@ -99,7 +92,7 @@ router.post('/signup/request', async (req, res) => {
 });
 
 router.post('/signup/verify', async (req, res) => {
-  let { email, otp } = req.body;
+  let { email, otp } = req.body || {};
   try {
     if (!email || !otp) {
       return res.status(400).json({ error: 'Email and OTP are required' });
@@ -147,7 +140,7 @@ router.post('/signup/verify', async (req, res) => {
 });
 
 router.post('/forgot-password/request', async (req, res) => {
-  let { email } = req.body;
+  let { email } = req.body || {};
   try {
     if (!email || typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({ error: 'Valid email is required' });
@@ -168,18 +161,20 @@ router.post('/forgot-password/request', async (req, res) => {
       data: { otpCode, otpExpiry }
     });
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER || 'wearegoalcreatives@gmail.com',
-      to: email,
-      subject: 'GC Studio - Password Reset',
-      text: `Hello ${employee.firstName},\n\nYour password reset OTP is: ${otpCode}\n\nThis code is valid for 10 minutes.\n\nIf you did not request this, please ignore this email.`
-    };
-
+    // Send the email via Brevo / Nodemailer
     try {
-      await transporter.sendMail(mailOptions);
-    } catch (emailErr) {
-      console.error('Error sending email:', emailErr);
-      return res.status(500).json({ error: 'Failed to send reset email. Please try again later.' });
+      await sendEmail({
+        to: email,
+        subject: 'GC Studio - Password Reset',
+        text: `Hello ${employee.firstName},\n\nYour password reset OTP is: ${otpCode}\n\nThis code is valid for 10 minutes.\n\nIf you did not request this, please ignore this email.`,
+        recipientName: employee.firstName
+      });
+    } catch (emailErr: any) {
+      console.error('Error sending reset email:', emailErr);
+      return res.status(500).json({ 
+        error: 'Failed to send reset email. Please try again later.',
+        details: emailErr?.message || String(emailErr)
+      });
     }
 
     res.json({ message: 'If that email exists, an OTP has been sent.' });
@@ -190,7 +185,7 @@ router.post('/forgot-password/request', async (req, res) => {
 });
 
 router.post('/forgot-password/reset', async (req, res) => {
-  let { email, otp, newPassword } = req.body;
+  let { email, otp, newPassword } = req.body || {};
   try {
     if (!email || !otp || !newPassword) {
       return res.status(400).json({ error: 'Email, OTP, and new password are required' });
@@ -238,7 +233,7 @@ router.post('/forgot-password/reset', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  let { email, password } = req.body;
+  let { email, password } = req.body || {};
   try {
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
