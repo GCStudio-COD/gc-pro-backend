@@ -20,6 +20,14 @@ const transporter = nodemailer.createTransport({
 router.post('/signup/request', async (req, res) => {
   let { firstName, lastName, email, password, fullname, fullName, name } = req.body;
   try {
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ error: 'Valid email is required' });
+    }
+    if (!password || typeof password !== 'string' || !password.trim()) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+    email = email.trim().toLowerCase();
+
     if (!firstName) {
       const full = (fullname || fullName || name || '').trim();
       if (full) {
@@ -80,19 +88,25 @@ router.post('/signup/request', async (req, res) => {
       await transporter.sendMail(mailOptions);
     } catch (emailErr) {
       console.error('Error sending email:', emailErr);
-      return res.status(500).json({ error: 'Failed to send OTP email. Please try again later.' });
+      return res.status(500).json({ error: 'Failed to send OTP email. Please check server SMTP configuration.' });
     }
 
     res.json({ message: 'OTP sent to email.' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to request sign up' });
+    console.error('Signup request error:', error);
+    res.status(500).json({ error: 'Failed to request sign up. Internal error.' });
   }
 });
 
 router.post('/signup/verify', async (req, res) => {
-  const { email, otp } = req.body;
+  let { email, otp } = req.body;
   try {
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and OTP are required' });
+    }
+    email = email.trim().toLowerCase();
+    otp = String(otp).trim();
+
     const employee = await prisma.employee.findUnique({ where: { email } });
     
     if (!employee || employee.status !== 'Unverified') {
@@ -133,8 +147,13 @@ router.post('/signup/verify', async (req, res) => {
 });
 
 router.post('/forgot-password/request', async (req, res) => {
-  const { email } = req.body;
+  let { email } = req.body;
   try {
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ error: 'Valid email is required' });
+    }
+    email = email.trim().toLowerCase();
+
     const employee = await prisma.employee.findUnique({ where: { email } });
     if (!employee) {
       // Return success even if not found to prevent email enumeration
@@ -171,8 +190,14 @@ router.post('/forgot-password/request', async (req, res) => {
 });
 
 router.post('/forgot-password/reset', async (req, res) => {
-  const { email, otp, newPassword } = req.body;
+  let { email, otp, newPassword } = req.body;
   try {
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Email, OTP, and new password are required' });
+    }
+    email = email.trim().toLowerCase();
+    otp = String(otp).trim();
+
     const employee = await prisma.employee.findUnique({ where: { email } });
     
     if (!employee) {
@@ -213,8 +238,13 @@ router.post('/forgot-password/reset', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  let { email, password } = req.body;
   try {
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+    email = email.trim().toLowerCase();
+
     const employee = await prisma.employee.findUnique({ where: { email } });
     if (!employee) return res.status(400).json({ error: 'Invalid credentials' });
 
