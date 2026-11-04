@@ -27,6 +27,7 @@ jobs:
             
             # Update Prisma database schema if there are changes
             npx prisma db push
+            npx prisma generate
             
             # Restart the server (Assuming you are using PM2)
             pm2 restart all

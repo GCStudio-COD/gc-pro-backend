@@ -60,16 +60,20 @@ model AttendanceLog {
 }
 
 model LeaveRequest {
-  id          String   @id @default(uuid())
-  employeeId  String
-  employee    Employee @relation(fields: [employeeId], references: [id])
-  type        String   @default("Paid") // Paid, Sick, Emergency
-  startDate   DateTime @db.Date
-  endDate     DateTime @db.Date
-  reason      String
-  status      String   @default("Pending") // Pending, Approved, Rejected, CancelPending, Cancelled
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(uuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  type          String   @default("Paid") // Paid, Sick, Emergency, Work From Home, Unpaid
+  startDate     DateTime @db.Date
+  endDate       DateTime @db.Date
+  reason        String
+  status        String   @default("Pending") // Pending, Approved, Rejected, CancelPending, Cancelled
+  isHalfDay     Boolean  @default(false)
+  halfDayPeriod String?  // "First Half" or "Second Half"
+  adminComment  String?  @db.Text
+  pmComment     String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Notification {
