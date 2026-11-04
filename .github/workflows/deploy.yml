@@ -25,8 +25,8 @@ jobs:
             git reset --hard origin/master
             git clean -fd
             
-            # Install any new dependencies
-            npm install
+            # Install any new dependencies (including dev for tsc/prisma)
+            npm install --include=dev
             
             # Update Prisma database schema if there are changes
             npx prisma db push

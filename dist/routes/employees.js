@@ -1,0 +1,108 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const client_1 = require("@prisma/client");
+const auth_1 = require("../middleware/auth");
+const router = (0, express_1.Router)();
+const prisma = new client_1.PrismaClient();
+router.use(auth_1.authenticateToken); // Protect all routes
+router.get('/', async (req, res) => {
+    const { status } = req.query;
+    try {
+        const filters = {};
+        if (status)
+            filters.status = status;
+        const employees = await prisma.employee.findMany({
+            where: filters
+        });
+        res.json(employees);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+// Approval endpoint
+router.put('/:id/approve', async (req, res) => {
+    const { role } = req.body;
+    const userRole = req.user?.role;
+    const targetId = req.params.id;
+    try {
+        // Basic validation
+        if (!['admin', 'project-manager', 'employee'].includes(role)) {
+            return res.status(400).json({ error: 'Invalid role provided' });
+        }
+        // Role-based authorization
+        if (userRole === 'project-manager' && role !== 'employee') {
+            return res.status(403).json({ error: 'PMs can only approve Employees' });
+        }
+        if (!['SuperAdmin', 'admin', 'project-manager'].includes(userRole)) {
+            return res.status(403).json({ error: 'Unauthorized to approve users' });
+        }
+        const updated = await prisma.employee.update({
+            where: { id: targetId },
+            data: {
+                status: 'Active',
+                role: role
+            }
+        });
+        res.json(updated);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+router.get('/:id', async (req, res) => {
+    try {
+        const employee = await prisma.employee.findUnique({ where: { id: req.params.id } });
+        if (!employee)
+            return res.status(404).json({ error: 'Employee not found' });
+        res.json(employee);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+router.put('/:id', async (req, res) => {
+    try {
+        const updated = await prisma.employee.update({
+            where: { id: req.params.id },
+            data: req.body
+        });
+        res.json(updated);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+router.delete('/:id', async (req, res) => {
+    try {
+        const userRole = req.user?.role;
+        if (userRole !== 'admin' && userRole !== 'SuperAdmin') {
+            return res.status(403).json({ error: 'Unauthorized to delete users' });
+        }
+        const targetId = req.params.id;
+        // Additional check: Don't allow an admin to delete a SuperAdmin
+        const target = await prisma.employee.findUnique({ where: { id: targetId } });
+        if (target?.role === 'SuperAdmin' && userRole !== 'SuperAdmin') {
+            return res.status(403).json({ error: 'Cannot delete SuperAdmin' });
+        }
+        // Manually cascade deletes since Prisma schema lacks onDelete: Cascade
+        await prisma.$transaction([
+            prisma.timeLog.deleteMany({ where: { employeeId: targetId } }),
+            prisma.attendanceLog.deleteMany({ where: { employeeId: targetId } }),
+            prisma.leaveRequest.deleteMany({ where: { employeeId: targetId } }),
+            prisma.notification.deleteMany({ where: { employeeId: targetId } }),
+            prisma.meeting.deleteMany({ where: { organizerId: targetId } }),
+            prisma.plakyTask.updateMany({
+                where: { assigneeId: targetId },
+                data: { assigneeId: null }
+            }),
+            prisma.employee.delete({ where: { id: targetId } })
+        ]);
+        res.json({ success: true });
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+exports.default = router;
