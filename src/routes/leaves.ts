@@ -172,9 +172,6 @@ router.put('/:id', async (req: any, res) => {
       if (!isAdmin && !isPM) {
         return res.status(403).json({ error: 'Unauthorized: Only Admin and Project Manager can approve or reject leaves' });
       }
-      if (leave.employeeId === userId) {
-        return res.status(403).json({ error: 'You cannot approve your own leave request' });
-      }
     }
 
     // Build update payload
