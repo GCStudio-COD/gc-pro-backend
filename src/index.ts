@@ -44,6 +44,19 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'gc-project-backend is running' });
 });
 
+// Temporary debug endpoint to inspect leave data
+app.get('/api/debug-leave/:id', async (req, res) => {
+  try {
+    const leave = await prisma.leaveRequest.findUnique({
+      where: { id: req.params.id },
+      include: { employee: true }
+    });
+    res.json({ leave });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
