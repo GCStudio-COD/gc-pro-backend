@@ -164,15 +164,14 @@ router.put('/:id', async (req: any, res) => {
 
     // Normalize role string (case-insensitive, remove spaces/dashes/underscores)
     const normalizedRole = role.toLowerCase().replace(/[-_ ]/g, '');
-    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'superadmin';
-    const isPM = normalizedRole === 'projectmanager' || normalizedRole === 'pm';
-
-    if (!isAdmin && !isPM) {
-      return res.status(403).json({ error: 'Unauthorized: Only Admin and Project Manager can manage leaves' });
-    }
+    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'superadmin' || normalizedRole.includes('admin');
+    const isPM = normalizedRole === 'projectmanager' || normalizedRole === 'pm' || normalizedRole.includes('pm') || normalizedRole.includes('projectmanager');
 
     // Status change authorization
     if (req.body.status && req.body.status !== leave.status) {
+      if (!isAdmin && !isPM) {
+        return res.status(403).json({ error: 'Unauthorized: Only Admin and Project Manager can approve or reject leaves' });
+      }
       if (leave.employeeId === userId) {
         return res.status(403).json({ error: 'You cannot approve your own leave request' });
       }
@@ -184,7 +183,7 @@ router.put('/:id', async (req: any, res) => {
       updateData.status = req.body.status;
     }
 
-    // 1. Direct explicit fields
+    // Direct explicit fields
     if (req.body.adminComment !== undefined) {
       updateData.adminComment = req.body.adminComment;
     }
@@ -192,22 +191,19 @@ router.put('/:id', async (req: any, res) => {
       updateData.pmComment = req.body.pmComment;
     }
 
-    // 2. Generic comment field (or fallback based on user role)
+    // Generic comment field (or fallback based on user role)
     if (req.body.comment !== undefined) {
       const commentVal = req.body.comment;
       if (isAdmin && updateData.adminComment === undefined) {
         updateData.adminComment = commentVal;
-      }
-      if (isPM && updateData.pmComment === undefined) {
+      } else if (isPM && updateData.pmComment === undefined) {
         updateData.pmComment = commentVal;
-      }
-      if (updateData.adminComment === undefined && updateData.pmComment === undefined) {
-        if (isAdmin) updateData.adminComment = commentVal;
-        else updateData.pmComment = commentVal;
+      } else if (updateData.adminComment === undefined && updateData.pmComment === undefined) {
+        updateData.adminComment = commentVal;
       }
     }
 
-    // 3. Role-fallback: ensure comment is not dropped if a PM sent adminComment or Admin sent pmComment
+    // Fallbacks
     if (isPM && !isAdmin && req.body.adminComment !== undefined && updateData.pmComment === undefined) {
       updateData.pmComment = req.body.adminComment;
     }
@@ -217,7 +213,8 @@ router.put('/:id', async (req: any, res) => {
 
     const updated = await prisma.leaveRequest.update({
       where: { id: req.params.id },
-      data: updateData
+      data: updateData,
+      include: { employee: true }
     });
     
     // Notifications (non-blocking)
