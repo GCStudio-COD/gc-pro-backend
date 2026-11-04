@@ -17,10 +17,13 @@ jobs:
           username: ubuntu
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
+            set -e
             cd /home/ubuntu/gc-project-backend
             
-            # Pull latest changes from GitHub
-            git pull origin master
+            # Force reset to latest master
+            git fetch origin master
+            git reset --hard origin/master
+            git clean -fd
             
             # Install any new dependencies
             npm install
