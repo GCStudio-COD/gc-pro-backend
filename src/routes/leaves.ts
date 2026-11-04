@@ -155,21 +155,24 @@ router.put('/:id/cancel', async (req, res) => {
 });
 
 router.put('/:id', async (req: any, res) => {
-  const role = req.user.role;
-  const userId = req.user.id;
+  const role = req.user?.role || '';
+  const userId = req.user?.id;
 
   try {
     const leave = await prisma.leaveRequest.findUnique({ where: { id: req.params.id } });
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
 
-    const isAdmin = role === 'admin' || role === 'SuperAdmin';
-    const isPM = role === 'project-manager' || role === 'PM';
+    // Normalize role string (case-insensitive, remove spaces/dashes/underscores)
+    const normalizedRole = role.toLowerCase().replace(/[-_ ]/g, '');
+    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'superadmin';
+    const isPM = normalizedRole === 'projectmanager' || normalizedRole === 'pm';
+
+    if (!isAdmin && !isPM) {
+      return res.status(403).json({ error: 'Unauthorized: Only Admin and Project Manager can manage leaves' });
+    }
 
     // Status change authorization
     if (req.body.status && req.body.status !== leave.status) {
-      if (!isAdmin && !isPM) {
-        return res.status(403).json({ error: 'Unauthorized to approve or change leave status' });
-      }
       if (leave.employeeId === userId) {
         return res.status(403).json({ error: 'You cannot approve your own leave request' });
       }
@@ -181,24 +184,35 @@ router.put('/:id', async (req: any, res) => {
       updateData.status = req.body.status;
     }
 
-    // Comment handling: Admin and PM can add/update comments
-    if (isAdmin) {
-      if (req.body.adminComment !== undefined) {
-        updateData.adminComment = req.body.adminComment;
-      } else if (req.body.comment !== undefined) {
-        updateData.adminComment = req.body.comment;
+    // 1. Direct explicit fields
+    if (req.body.adminComment !== undefined) {
+      updateData.adminComment = req.body.adminComment;
+    }
+    if (req.body.pmComment !== undefined) {
+      updateData.pmComment = req.body.pmComment;
+    }
+
+    // 2. Generic comment field (or fallback based on user role)
+    if (req.body.comment !== undefined) {
+      const commentVal = req.body.comment;
+      if (isAdmin && updateData.adminComment === undefined) {
+        updateData.adminComment = commentVal;
       }
-      if (req.body.pmComment !== undefined) {
-        updateData.pmComment = req.body.pmComment;
+      if (isPM && updateData.pmComment === undefined) {
+        updateData.pmComment = commentVal;
       }
-    } else if (isPM) {
-      if (req.body.pmComment !== undefined) {
-        updateData.pmComment = req.body.pmComment;
-      } else if (req.body.comment !== undefined) {
-        updateData.pmComment = req.body.comment;
+      if (updateData.adminComment === undefined && updateData.pmComment === undefined) {
+        if (isAdmin) updateData.adminComment = commentVal;
+        else updateData.pmComment = commentVal;
       }
-    } else if (req.body.adminComment !== undefined || req.body.pmComment !== undefined) {
-      return res.status(403).json({ error: 'Only Admin and Project Manager can add comments' });
+    }
+
+    // 3. Role-fallback: ensure comment is not dropped if a PM sent adminComment or Admin sent pmComment
+    if (isPM && !isAdmin && req.body.adminComment !== undefined && updateData.pmComment === undefined) {
+      updateData.pmComment = req.body.adminComment;
+    }
+    if (isAdmin && !isPM && req.body.pmComment !== undefined && updateData.adminComment === undefined) {
+      updateData.adminComment = req.body.pmComment;
     }
 
     const updated = await prisma.leaveRequest.update({
