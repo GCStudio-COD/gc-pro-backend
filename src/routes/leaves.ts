@@ -220,28 +220,32 @@ router.put('/:id', async (req: any, res) => {
       data: updateData
     });
     
-    // Notifications
-    if (req.body.status && req.body.status !== leave.status) {
-      const commentText = updateData.adminComment || updateData.pmComment;
-      const commentNote = commentText ? ` (Note: ${commentText})` : '';
-      await prisma.notification.create({
-        data: {
-          employeeId: updated.employeeId,
-          message: `Your leave request has been ${req.body.status.toLowerCase()}${commentNote}`,
-          type: 'leave',
-          creatorId: req.body.approverId || userId
-        }
-      });
-    } else if (updateData.adminComment !== undefined || updateData.pmComment !== undefined) {
-      const commenter = isAdmin ? 'Admin' : 'Project Manager';
-      await prisma.notification.create({
-        data: {
-          employeeId: updated.employeeId,
-          message: `${commenter} added a comment to your leave request`,
-          type: 'leave',
-          creatorId: userId
-        }
-      });
+    // Notifications (non-blocking)
+    try {
+      if (req.body.status && req.body.status !== leave.status) {
+        const commentText = updateData.adminComment || updateData.pmComment;
+        const commentNote = commentText ? ` (Note: ${commentText})` : '';
+        await prisma.notification.create({
+          data: {
+            employeeId: updated.employeeId,
+            message: `Your leave request has been ${req.body.status.toLowerCase()}${commentNote}`,
+            type: 'leave',
+            creatorId: req.body.approverId || userId
+          }
+        });
+      } else if (updateData.adminComment !== undefined || updateData.pmComment !== undefined) {
+        const commenter = isAdmin ? 'Admin' : 'Project Manager';
+        await prisma.notification.create({
+          data: {
+            employeeId: updated.employeeId,
+            message: `${commenter} added a comment to your leave request`,
+            type: 'leave',
+            creatorId: userId
+          }
+        });
+      }
+    } catch (notifErr) {
+      console.error('Failed to create notification for leave update:', notifErr);
     }
 
     res.json(updated);
