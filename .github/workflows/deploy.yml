@@ -29,5 +29,8 @@ jobs:
             npx prisma db push
             npx prisma generate
             
+            # Build TypeScript to dist
+            npx tsc
+            
             # Restart the server (Assuming you are using PM2)
             pm2 restart all
