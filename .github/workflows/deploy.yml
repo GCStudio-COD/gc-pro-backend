@@ -32,5 +32,7 @@ jobs:
             # Build TypeScript to dist
             npx tsc
             
-            # Restart the server (Assuming you are using PM2)
-            pm2 restart all
+            # Restart or fresh start server with PM2
+            pm2 delete all || true
+            pm2 start dist/index.js --name "gc-backend"
+            pm2 save
