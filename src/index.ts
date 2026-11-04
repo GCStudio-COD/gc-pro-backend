@@ -41,7 +41,12 @@ app.use('/api/plaky', plakyRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'gc-project-backend is running' });
+  res.json({ 
+    status: 'ok', 
+    message: 'gc-project-backend is running', 
+    version: 'v2-nov4-comments',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Temporary debug endpoint to inspect leave data
